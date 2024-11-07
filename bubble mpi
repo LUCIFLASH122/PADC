@@ -1,0 +1,47 @@
+ #include <mpi.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ void bubble_sort(int *arr, int n) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                int temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+ }
+ int main(int argc, char *argv[]) {
+    int rank, size, n;
+    int *data = NULL, *local_data = NULL;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    if (rank == 0) {
+        n = atoi(argv[1]);  // Total elements
+        data = (int *)malloc(n * sizeof(int));
+        for (int i = 0; i < n; i++) data[i] = rand() % 100;
+        int chunk_size = n / size;
+        MPI_Scatter(data, chunk_size, MPI_INT, local_data, chunk_size, MPI_INT, 
+0, MPI_COMM_WORLD);
+    } else {
+        int chunk_size = n / size;
+        local_data = (int *)malloc(chunk_size * sizeof(int));
+        MPI_Scatter(NULL, chunk_size, MPI_INT, local_data, chunk_size, MPI_INT, 
+0, MPI_COMM_WORLD);
+    }
+    // Each process sorts its segment
+    bubble_sort(local_data, n / size);
+    // Gather the sorted segments back
+    MPI_Gather(local_data, n / size, MPI_INT, data, n / size, MPI_INT, 0, 
+MPI_COMM_WORLD);
+    if (rank == 0) {
+        // Further steps to merge the sorted segments at root process, if needed
+        // Display final sorted array
+        free(data);
+    }
+    free(local_data);
+    MPI_Finalize();
+    return 0;
+ }
