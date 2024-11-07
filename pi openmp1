@@ -1,0 +1,29 @@
+#include <stdio.h>
+ #include <stdlib.h>
+ #include <omp.h>
+ #define NUM_SAMPLES 1000000000  // Total number of random samples
+ int main() {
+    long long count = 0;  // Count of points inside the quarter circle
+    // OpenMP parallel region
+    #pragma omp parallel
+    {
+        long long private_count = 0; // Private count for each thread
+        unsigned int seed = omp_get_thread_num(); // Seed for random number 
+generation
+        #pragma omp for
+        for (long long i = 0; i < NUM_SAMPLES; i++) {
+            double x = (double)rand_r(&seed) / RAND_MAX; // Random x in [0, 1]
+            double y = (double)rand_r(&seed) / RAND_MAX; // Random y in [0, 1]
+            if (x * x + y * y <= 1.0) {
+                private_count++; // Inside the circle
+            }
+        }
+        // Combine the counts from all threads
+        #pragma omp atomic
+    }
+        count += private_count;
+    // Calculate the estimated value of π
+ double pi_estimate = (double)count / NUM_SAMPLES * 4.0;
+    printf("Estimated value of π = %f\n", pi_estimate);
+    return 0;
+ }
