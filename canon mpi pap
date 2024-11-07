@@ -1,0 +1,100 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <mpi.h>
+#include <math.h>
+#include "papi.h"
+
+void printMatrix(int *matrix, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            printf("%d\t", matrix[i * cols + j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+void cannonMatrixMultiply(int *localA, int *localB, int *localC, int local_n) {
+    for (int i = 0; i < local_n; i++) {
+        for (int j = 0; j < local_n; j++) {
+            for (int k = 0; k < local_n; k++) {
+                localC[i * local_n + j] += localA[i * local_n + k] * localB[k * local_n + j];
+            }
+        }
+    }
+}
+int main(int argc, char *argv[]) {
+    int n, sqrt_p, myrank, p, *A, *B, *C, *localA, *localB, *localC, local_n;
+    long long s, s1, e, e1;
+    int retval;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &p);
+    if ((retval = PAPI_library_init(PAPI_VER_CURRENT)) != PAPI_VER_CURRENT) {
+        printf("Library initialization error! \n");
+        MPI_Finalize();
+        exit(1);
+    }
+    if (argc != 2) {
+        if (myrank == 0) printf("Usage: %s <matrix_dimension>\n", argv[0]);
+        MPI_Finalize();
+        return 1;
+    }
+    n = atoi(argv[1]);
+    sqrt_p = (int)sqrt(p);
+    if (n % sqrt_p != 0) {
+        if (myrank == 0) printf("Matrix dimension must be divisible by the square root of the number of processes.\n");
+        MPI_Finalize();
+        return 1;
+    }
+    A = (int *)malloc(n * n * sizeof(int));
+    B = (int *)malloc(n * n * sizeof(int));
+    C = (int *)calloc(n * n, sizeof(int));
+    if (A == NULL || B == NULL || C == NULL) {
+        printf("Memory allocation failed!\n");
+        MPI_Finalize();
+        return 1;
+    }
+    if (myrank == 0) {
+        srand(42);
+        for (int i = 0; i < n * n; i++) {
+            A[i] = rand() % 10000;
+            B[i] = rand() % 10000;
+        }
+        printf("Matrix A:\n");
+        printMatrix(A, n, n);
+        printf("Matrix B:\n");
+        printMatrix(B, n, n);
+    }
+    MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    local_n = n / sqrt_p;
+    localA = (int *)malloc(local_n * local_n * sizeof(int));
+    localB = (int *)malloc(local_n * local_n * sizeof(int));
+    localC = (int *)calloc(local_n * local_n, sizeof(int));
+    if (localA == NULL || localB == NULL || localC == NULL) {
+        printf("Memory allocation failed for local matrices!\n");
+        MPI_Finalize();
+        return 1;
+    }
+    s = PAPI_get_real_cyc();
+    s1 = PAPI_get_real_usec();
+    MPI_Scatter(A, local_n * local_n, MPI_INT, localA, local_n * local_n, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Scatter(B, local_n * local_n, MPI_INT, localB, local_n * local_n, MPI_INT, 0, MPI_COMM_WORLD);
+    cannonMatrixMultiply(localA, localB, localC, local_n);
+    MPI_Gather(localC, local_n * local_n, MPI_INT, C, local_n * local_n, MPI_INT, 0, MPI_COMM_WORLD);
+    e = PAPI_get_real_cyc();
+    e1 = PAPI_get_real_usec();
+    if (myrank == 0) {
+        printf("Matrix C (Result):\n");
+        printMatrix(C, n, n);
+        printf("\nWallclock cycles : %lld\nWallclock time(ms): %lld\n", e - s, e1 - s1);
+    }
+    free(A);
+    free(B);
+    free(C);
+    free(localA);
+    free(localB);
+    free(localC);
+    PAPI_shutdown();
+  MPI_Finalize();
+  return 0;
+}
