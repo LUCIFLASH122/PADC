@@ -1,0 +1,36 @@
+ #include <stdio.h>
+ #include <omp.h>
+ double calculate_speedup(double P, int N) {
+    return 1.0 / ((1.0 - P) + (P / N));
+}
+ int main() {
+    double P;  // Parallelizable portion of the program
+ int max_processors; // Maximum number of processors to simulate
+    // User input for parallelizable fraction and maximum processors
+    printf("Enter the parallelizable fraction of the program (P) (0 <= P <= 1): ");
+    scanf("%lf", &P);
+    printf("Enter the maximum number of processors to simulate: ");
+    scanf("%d", &max_processors);
+    // Ensure valid input
+    if (P < 0 || P > 1) {
+        printf("Error: Parallelizable fraction must be between 0 and 1.\n");
+        return 1;
+    }
+    if (max_processors <= 0) {
+        printf("Error: Number of processors must be greater than 0.\n");
+        return 1;
+    }
+ // Array to store speedup results
+    double speedup_results[max_processors + 1];
+    // Parallel loop to calculate speedup for each number of processors
+    #pragma omp parallel for
+    for (int N = 1; N <= max_processors; N++) {
+        speedup_results[N] = calculate_speedup(P, N);
+    }
+    // Print results
+    printf("Processors\tSpeedup\n");
+    for (int N = 1; N <= max_processors; N++) {
+        printf("%d\t\t%f\n", N, speedup_results[N]);
+    }
+    return 0;
+ }
