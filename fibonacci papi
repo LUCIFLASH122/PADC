@@ -1,0 +1,50 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include "papi.h" /* This needs to be included every time you use PAPI */
+ int your_slow_code()
+ {
+ int i,tmp;
+ for(i=1; i<20000; i++)
+ {
+ tmp=(tmp+100)/i;
+ }
+ return 0;
+ }
+ long double fib(long double n){
+ long double a=0,b=1,c,k;
+for(long double i=0;i<=n;i++){
+ k=a;
+ c=a+b;
+ a=b;
+ b=c;
+ }
+ return k;
+ }
+ int main()
+ {
+ long long s,s1, e, e1;
+ int retval;
+ if((retval = PAPI_library_init(PAPI_VER_CURRENT)) != PAPI_VER_CURRENT )
+ {
+ printf("Library initialization error! \n");
+ exit(1);
+ }
+ /* Here you get initial cycles and time */
+ /* No error checking is done here because this function call is always
+ successful */
+ for(int i=10;i<=10000;i*=10){
+ s = PAPI_get_real_cyc();
+ s1= PAPI_get_real_usec();
+ // printf("\n Here, I need to include the fibonaci code ");
+ int x=fib(i);
+ /*Here you get final cycles and time */
+ e = PAPI_get_real_cyc();
+ // your_slow_code();
+ e1= PAPI_get_real_usec();
+ printf("For n=%d\nWallclock cycles : %lld\nWallclock time(ms): %lld\n",i,e-s,e1
+s1);
+ }
+ /* clean up */
+PAPI_shutdown();
+ exit(0);
+ }
