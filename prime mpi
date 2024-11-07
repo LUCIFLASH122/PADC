@@ -1,0 +1,42 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <math.h>
+ #include <mpi.h>
+ int is_prime(int num) {
+    if (num <= 1) return 0;
+    if (num <= 3) return 1;
+    if (num % 2 == 0 || num % 3 == 0) return 0;
+    for (int i = 5; i <= sqrt(num); i += 6) {
+        if (num % i == 0 || num % (i + 2) == 0) return 0;
+    }
+    return 1;
+ }
+int main(int argc, char *argv[]) {
+    int rank, size, start, end;
+    int n = 100; // Define the upper limit for finding primes
+    int local_prime_count = 0, global_prime_count = 0;
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    // Divide range across processes
+    int range = n / size;
+    start = rank * range + 1;
+    end = (rank + 1) * range;
+    // Adjust the last process's range to go up to n
+    if (rank == size - 1) end = n;
+    // Find primes in the assigned range
+    for (int i = start; i <= end; i++) {
+        if (is_prime(i)) {
+            local_prime_count++;
+        }
+    }
+    // Sum all local prime counts to get the global prime count
+    MPI_Reduce(&local_prime_count, &global_prime_count, 1, MPI_INT, 
+MPI_SUM, 0, MPI_COMM_WORLD);
+    // Display result on the root process
+    if (rank == 0) {
+        printf("Total number of primes up to %d is %d\n", n, global_prime_count);
+    }
+    MPI_Finalize();
+    return 0;
+ }
