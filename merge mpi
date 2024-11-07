@@ -1,0 +1,72 @@
+#include <stdio.h>
+ #include <stdlib.h>
+ #include <mpi.h>
+ void merge(int arr[], int low, int mid, int high) {
+    int temp[high - low + 1];
+    int left = low;
+    int right = mid + 1;
+    int index = 0;
+    while (left <= mid && right <= high) {
+        if
+ (arr[left] <= arr[right]) {
+            temp[index++] = arr[left++];
+        }
+        }
+    }
+ else {
+            temp[index++] = arr[right++];
+    while (left <= mid) {
+        temp[index++] = arr[left++];
+    }
+    while (right <= high) {
+        temp[index++] = arr[right++];
+    }
+    for (int i = 0; i < index; i++) {
+        arr[low + i] = temp[i];
+    }
+ }
+ void mergeSort(int arr[], int low, int high) {
+    if (low < high) {
+        int mid = (low + high) / 2;
+        mergeSort(arr, low, mid);
+        mergeSort(arr, mid + 1, high);
+        merge(arr, low, mid, high);
+    }
+ }
+ int main(int argc, char *argv[]) {
+    int rank, size;
+    // Initialize MPI
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    int arr[] = {38, 27, 43, 3, 9, 82, 10};
+    int n = sizeof(arr) / sizeof(arr[0]);
+    int local_n = n / size; // Size of subarray each process will handle
+    int *local_arr = malloc(local_n * sizeof(int));
+    // Scatter data across processes
+    MPI_Scatter(arr, local_n, MPI_INT, local_arr, local_n, MPI_INT, 0, 
+MPI_COMM_WORLD);
+    // Each process sorts its local array
+    mergeSort(local_arr, 0, local_n - 1);
+    // Gather sorted subarrays back to the root process
+    MPI_Gather(local_arr, local_n, MPI_INT, arr, local_n, MPI_INT, 0, 
+MPI_COMM_WORLD);
+    if (rank == 0) {
+        // Root process merges the sorted sections
+        for (int i = 1; i < size; i++) {
+            int mid = (i * local_n) - 1;
+            int high = (i == size - 1) ? n - 1 : ((i + 1) * local_n) - 1;
+            merge(arr, 0, mid, high);
+        }
+        // Print sorted array
+        printf("Sorted array:\n");
+        for (int i = 0; i < n; i++) {
+            printf("%d ", arr[i]);
+        }
+        printf("\n");
+    }
+    // Clean up
+    free(local_arr);
+    MPI_Finalize();
+    return 0;
+ }
