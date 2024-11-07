@@ -1,0 +1,65 @@
+ #include <mpi.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #define N 16  // Total number of elements
+ void merge(int *arr, int *temp, int left, int mid, int right) {
+ int i = left, j = mid, k = left;
+    while (i < mid && j < right) {
+        if
+ (arr[i] < arr[j]) temp[k++] = arr[i++];
+        else temp[k++] = arr[j++];
+    }
+    while (i < mid) temp[k++] = arr[i++];
+    while (j < right) temp[k++] = arr[j++];
+    for (i = left; i < right; i++) arr[i] = temp[i];
+ }
+ void merge_sort(int *arr, int *temp, int left, int right) {
+    if (right - left <= 1) return;
+    int mid = (left + right) / 2;
+    merge_sort(arr, temp, left, mid);
+    merge_sort(arr, temp, mid, right);
+    merge(arr, temp, left, mid, right);
+ }
+ int main(int argc, char *argv[]) {
+ int rank, size, local_n;
+    int *data = NULL, *local_data = NULL, *temp = NULL;
+ MPI_Init(&argc, &argv);
+ MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+ MPI_Comm_size(MPI_COMM_WORLD, &size);
+    local_n = N / size;  // Number of elements per process
+    local_data = (int *)malloc(local_n * sizeof(int));
+    temp = (int *)malloc(local_n * sizeof(int));
+ if (rank == 0) {
+        data = (int *)malloc(N * sizeof(int));
+        for (int i = 0; i < N; i++) {
+            data[i] = rand() % 100;  // Random numbers for demonstration
+        }
+        printf("Unsorted data:\n");
+        for (int i = 0; i < N; i++) printf("%d ", data[i]);
+        printf("\n");
+    }
+    // Scatter data to each process
+ MPI_Scatter(data, local_n, MPI_INT, local_data, local_n, MPI_INT, 0, 
+MPI_COMM_WORLD);
+ // Perform local Merge Sort
+    merge_sort(local_data, temp, 0, local_n);
+ // Gather sorted segments back to root process
+ MPI_Gather(local_data, local_n, MPI_INT, data, local_n, MPI_INT, 0, 
+MPI_COMM_WORLD);
+    // Final merge at the root process
+ if (rank == 0) {
+        int *final_temp = (int *)malloc(N * sizeof(int));
+        for (int i = 1; i < size; i++) {
+            merge(data, final_temp, 0, i * local_n, (i + 1) * local_n);
+        }
+        printf("Sorted data:\n");
+        for (int i = 0; i < N; i++) printf("%d ", data[i]);
+        printf("\n");
+        free(final_temp);
+        free(data);
+    }
+    free(local_data);
+    free(temp);
+ MPI_Finalize();
+  return 0;
+}
