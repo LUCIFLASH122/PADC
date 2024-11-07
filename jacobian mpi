@@ -1,0 +1,57 @@
+ #include <mpi.h>
+ #include <math.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ void function(double *x, double *f) {
+ f[0] = x[0] * x[0] + x[1] * x[1] + x[2] * x[2] + x[3] * x[3]; 
+    f[1] = sin(x[0]);
+    f[2] = cos(x[1]);
+ f[3] = exp(x[2]);
+ }
+ void compute_jacobian_for_row(double *x, double *jacobian_row, int row, int n, 
+double eps) {
+    double f1[4], f2[4];
+    function(x, f1);
+    for (int j = 0; j < n; j++) {
+        double x_temp = x[j];
+        x[j] = x_temp + eps;
+        function(x, f2);
+        jacobian_row[j] = (f2[row] - f1[row]) / eps;
+        x[j] = x_temp;
+    }
+ }
+ int main(int argc, char** argv) {
+ MPI_Init(&argc, &argv);
+ int rank, size;
+ MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+ MPI_Comm_size(MPI_COMM_WORLD, &size);
+    int n = 4; 
+    int m = 4; 
+    double x[4] = {1.0, 2.0, 3.0, 4.0}; 
+    double jacobian_row[n]; 
+    double *global_jacobian = NULL;
+    if (rank == 0) {
+        global_jacobian = (double*)malloc(m * n * sizeof(double)); 
+    }
+    int rows_per_process = (m + size - 1) / size; 
+    for (int i = 0; i < rows_per_process; i++) {
+        int row = rank * rows_per_process + i;
+        if (row < m) { 
+            compute_jacobian_for_row(x, jacobian_row, row, n, 1e-6);
+            MPI_Gather(jacobian_row, n, MPI_DOUBLE, 
+                       global_jacobian + row * n, n, MPI_DOUBLE, 
+                       0, MPI_COMM_WORLD);
+        }
+    }
+    if (rank == 0) {
+        printf("Jacobian Matrix:\n");
+        for (int i = 0; i < m; i++) {
+            for (int j = 0; j < n; j++) {
+                printf("%f ", global_jacobian[i * n + j]);
+            }
+            printf("\n");
+        }
+    }
+    MPI_Finalize();
+    return 0;
+ }
