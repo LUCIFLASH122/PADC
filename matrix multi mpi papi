@@ -1,70 +1,74 @@
+#include <mpi.h>
+ #include <papi.h>
  #include <stdio.h>
  #include <stdlib.h>
- #include <mpi.h>
- #define N 20
- #define MAX_NUM 100
-void merge(int* left, int left_size, int* right, int right_size, int* result) {
- int i = 0, j = 0, k = 0;
- while (i < left_size && j < right_size) {
- if (left[i] < right[j]) {
- result[k++] = left[i++];
- } else {
- result[k++] = right[j++];
+ #define N 4  // Matrix size, assuming N is divisible by the number of processes
+ void matrix_multiply(double *A, double *B, double *C, int n) {
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            C[i * n + j] = 0.0;
+ for (int k = 0; k < n; k++) {
+ C[i * n + j] += A[i * n + k] * B[k * n + j];
+            }
+        }
+    }
  }
- }
- while (i < left_size) {
- result[k++] = left[i++];
- }
- while (j < right_size) {
- result[k++] = right[j++];
- }
- }
- // Merge sort function
- void merge_sort(int* arr, int size) {
- if (size < 2) return;
- int mid = size / 2;
- merge_sort(arr, mid);
- merge_sort(arr + mid, size - mid);
- int* temp = (int*)malloc(size * sizeof(int));
- merge(arr, mid, arr + mid, size - mid, temp);
- for (int i = 0; i < size; i++) {
- arr[i] = temp[i];
- }
- free(temp);
- }
- int main(int argc, char** argv) {
- int rank, size;
- int arr[N];
- MPI_Init(&argc, &argv);
- MPI_Comm_rank(MPI_COMM_WORLD, &rank);
- MPI_Comm_size(MPI_COMM_WORLD, &size);
+ int main(int argc, char *argv[]) {
+    int rank, size;
+    double A[N * N], B[N * N], C[N * N];
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    if (rank == 0) {
+        for (int i = 0; i < N * N; i++) {
+            A[i] = rand() % 10;
+            B[i] = rand() % 10;
+        }
+    }
+    // Distribute matrix A and B blocks across processes
+    int local_n = N / size;
+    double *local_A = malloc(local_n * N * sizeof(double));
+    double *local_C = malloc(local_n * N * sizeof(double));
+    MPI_Scatter(A, local_n * N, MPI_DOUBLE, local_A, local_n * N, 
+MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    MPI_Bcast(B, N * N, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // Initialize PAPI
+    if (PAPI_library_init(PAPI_VER_CURRENT) != PAPI_VER_CURRENT) {
+        printf("PAPI library initialization error!\n");
+        MPI_Finalize();
+        return 1;
+    }
+    int events[2] = {PAPI_FP_OPS, PAPI_L1_DCM};  // Floating-point operations 
+and L1 data cache misses
+    long long values[2];
+    if (PAPI_start_counters(events, 2) != PAPI_OK) {
+        printf("PAPI start counters error!\n");
+        MPI_Finalize();
+        return 1;
+    }
+    // Perform local matrix multiplication
+    matrix_multiply(local_A, B, local_C, local_n);
+    // Stop PAPI counters and retrieve values
+if (PAPI_stop_counters(values, 2) != PAPI_OK) {
+ printf("PAPI stop counters error!\n");
+ } else if (rank == 0) {
+        printf("Floating-point operations: %lld\n", values[0]);
+        printf("L1 data cache misses: %lld\n", values[1]);
+    }
+    // Gather the result matrix C at root
+ MPI_Gather(local_C, local_n * N, MPI_DOUBLE, C, local_n * N, MPI_DOUBLE, 
+0, MPI_COMM_WORLD);
  if (rank == 0) {
- srand(time(NULL));
- for (int i = 0; i < N; i++) {
- arr[i] = rand() % MAX_NUM;
- }
-printf("Original array: ");
- for (int i = 0; i < N; i++) {
- printf("%d ", arr[i]);
- }
- printf("\n");
- }
- int local_size = N / size;
- int* local_arr = (int*)malloc(local_size * sizeof(int));
- MPI_Scatter(arr, local_size, MPI_INT, local_arr, local_size, MPI_INT, 0, 
-MPI_COMM_WORLD);
- merge_sort(local_arr, local_size);
- MPI_Gather(local_arr, local_size, MPI_INT, arr, local_size, MPI_INT, 0, 
-MPI_COMM_WORLD);
- if (rank == 0) {
- merge_sort(arr, N);
- printf("Sorted array: ");
- for (int i = 0; i < N; i++) {
- printf("%d ", arr[i]);
- }
- printf("\n");
- }
- free(local_arr);
+        printf("Result matrix:\n");
+        for (int i = 0; i < N; i++) {
+            for (int j = 0; j < N; j++) {
+                printf("%lf ", C[i * N + j]);
+            }
+            printf("\n");
+        }
+    }
+    free(local_A);
+    free(local_C);
  MPI_Finalize();
- return 0;
+    return 0;
  }
