@@ -1,0 +1,77 @@
+ #include <mpi.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #define N 16  // Total number of elements
+ void bubble_sort(int *arr, int n) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if
+ (arr[j] > arr[j + 1]) {
+                int temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+ }
+ int main(int argc, char *argv[]) {
+ int rank, size, local_n;
+    int *data = NULL, *local_data = NULL;
+ MPI_Init(&argc, &argv);
+ MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+ MPI_Comm_size(MPI_COMM_WORLD, &size);
+    local_n = N / size;  // Number of elements per process
+    local_data = (int *)malloc(local_n * sizeof(int));
+ if (rank == 0) {
+        data = (int *)malloc(N * sizeof(int));
+        for (int i = 0; i < N; i++) {
+            data[i] = rand() % 100;  // Random numbers for demonstration
+        }
+        printf("Unsorted data:\n");
+        for (int i = 0; i < N; i++) printf("%d ", data[i]);
+        printf("\n");
+    }
+    // Scatter data to each process
+    MPI_Scatter(data, local_n, MPI_INT, local_data, local_n, MPI_INT, 0, 
+MPI_COMM_WORLD);
+    // Perform local Bubble Sort
+    bubble_sort(local_data, local_n);
+    // Neighbor exchange using point-to-point communication
+    for (int step = 0; step < size; step++) {
+        if (rank % 2 == 0) {
+            if (rank + 1 < size) {
+                MPI_Send(local_data + local_n - 1, 1, MPI_INT, rank + 1, 0, 
+MPI_COMM_WORLD);
+                int recv_val;
+                MPI_Recv(&recv_val, 1, MPI_INT, rank + 1, 0, MPI_COMM_WORLD, 
+MPI_STATUS_IGNORE);
+                if (recv_val < local_data[local_n - 1]) {
+                    local_data[local_n - 1] = recv_val;
+                }
+            }
+        } else {
+            if (rank - 1 >= 0) {
+                int recv_val;
+                MPI_Recv(&recv_val, 1, MPI_INT, rank - 1, 0, MPI_COMM_WORLD, 
+MPI_STATUS_IGNORE);
+                MPI_Send(local_data, 1, MPI_INT, rank - 1, 0, MPI_COMM_WORLD);
+                if (recv_val > local_data[0]) {
+                    local_data[0] = recv_val;
+                }
+            }
+        }
+        MPI_Barrier(MPI_COMM_WORLD);  // Sync before next step
+    }
+    // Gather sorted data at root process
+    MPI_Gather(local_data, local_n, MPI_INT, data, local_n, MPI_INT, 0, 
+MPI_COMM_WORLD);
+if (rank == 0) {
+        printf("Sorted data:\n");
+        for (int i = 0; i < N; i++) printf("%d ", data[i]);
+        printf("\n");
+        free(data);
+    }
+    free(local_data);
+ MPI_Finalize();
+    return 0;
+ }
