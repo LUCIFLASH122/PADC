@@ -1,0 +1,61 @@
+#include <mpi.h>
+ #include <papi.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <math.h>
+ #define N 9  // Assume N=9 for a 3x3 process grid
+ void matrix_multiply(double *A, double *B, double *C, int block_size) {
+    for (int i = 0; i < block_size; i++) {
+        for (int j = 0; j < block_size; j++) {
+            C[i * block_size + j] = 0.0;
+            for (int k = 0; k < block_size; k++) {
+                C[i * block_size + j] += A[i * block_size + k] * B[k * block_size + j];
+            }
+        }
+    }
+ }
+ int main(int argc, char *argv[]) {
+    int rank, size, block_size;
+    double A[N], B[N], C[N] = {0};
+    MPI_Comm cart_comm;
+    int dims[2] = {3, 3}, periods[2] = {1, 1};
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 1, &cart_comm);
+    // Initialize matrices A and B
+    for (int i = 0; i < N; i++) {
+        A[i] = rand() % 10;
+        B[i] = rand() % 10;
+    }
+    block_size = N / dims[0];
+    double *local_A = malloc(block_size * block_size * sizeof(double));
+    double *local_B = malloc(block_size * block_size * sizeof(double));
+    double *local_C = calloc(block_size * block_size, sizeof(double));
+    // Initialize PAPI
+    if (PAPI_library_init(PAPI_VER_CURRENT) != PAPI_VER_CURRENT) {
+        printf("PAPI library initialization error!\n");
+        MPI_Finalize();
+        return 1;
+    }
+    int events[2] = {PAPI_FP_OPS, PAPI_L1_DCM};
+    long long values[2];
+    if (PAPI_start_counters(events, 2) != PAPI_OK) {
+        printf("PAPI start counters error!\n");
+        MPI_Finalize();
+        return 1;
+    }
+    // Perform Cannon's Algorithm
+    matrix_multiply(local_A, local_B, local_C, block_size);
+    if (PAPI_stop_counters(values, 2) != PAPI_OK) {
+printf("PAPI stop counters error!\n");
+ } else if (rank == 0) {
+        printf("Floating-point operations: %lld\n", values[0]);
+        printf("L1 data cache misses: %lld\n", values[1]);
+    }
+    free(local_A);
+    free(local_B);
+    free(local_C);
+ MPI_Finalize();
+    return 0;
+ }
